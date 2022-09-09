@@ -312,7 +312,6 @@ def create_sticker_file(message, image, context: CallbackContext):
         background.paste(image, (int(((100 - image.size[0]) / 2)), int(((100 - image.size[1]) / 2))))
         image = background
 
-    # else format image to sticker
     else:
         width, height = image.size
         reference_length = max(width, height)
@@ -320,10 +319,7 @@ def create_sticker_file(message, image, context: CallbackContext):
         new_width = width * ratio
         new_height = height * ratio
         # round up if new dimension has .999 or more
-        if new_width % 1 >= .999:
-            new_width = int(round(new_width))
-        else:
-            new_width = int(new_width)
+        new_width = int(round(new_width)) if new_width % 1 >= .999 else int(new_width)
         if new_height % 1 >= .999:
             new_height = int(round(new_height))
         else:
@@ -332,7 +328,7 @@ def create_sticker_file(message, image, context: CallbackContext):
         image = image.resize((new_width, new_height), Image.ANTIALIAS)
 
     # save image object to temporary file
-    temp_path = os.path.join(temp_dir(), (uuid.uuid4().hex[:6].upper() + '.png'))
+    temp_path = os.path.join(temp_dir(), f'{uuid.uuid4().hex[:6].upper()}.png')
     image.save(temp_path, format="PNG", optimize=True)
 
     # send formatted image as a document
@@ -408,8 +404,10 @@ def change_lang_callback(update: Update, context: CallbackContext):
             try:
                 _id = int(''.join(c for c in word if c.isdigit()))
                 user = bot.get_chat(_id)
-                message[i] = '<a href="tg://user?id={}">{}{}</a>'.format(_id, user.first_name,
-                                                                         ' ' + user.last_name if user.last_name else '')
+                message[
+                    i
+                ] = f"""<a href="tg://user?id={_id}">{user.first_name}{f' {user.last_name}' if user.last_name else ''}</a>"""
+
             except ValueError:
                 message[i] = 'UNKNOWN_USER_ID'
                 continue
@@ -570,7 +568,11 @@ def change_lang_command(update: Update, context: CallbackContext):
             row += 1
             keyboard.append([])
         keyboard[row].append(
-            InlineKeyboardButton(lang[lang_code]['lang_name'], callback_data="lang:{}".format(lang_code)))
+            InlineKeyboardButton(
+                lang[lang_code]['lang_name'], callback_data=f"lang:{lang_code}"
+            )
+        )
+
     markup = InlineKeyboardMarkup(keyboard)
     message.reply_text(get_message(message.chat_id, "select_lang"), reply_markup=markup)
 
@@ -578,8 +580,11 @@ def change_lang_command(update: Update, context: CallbackContext):
 @run_async
 def donate_command(update: Update, context: CallbackContext):
     message = update.message
-    message_text = get_message(message.chat_id, "donate") + "\n\n*Paypal:* {}\n*CashApp:* {}\n*BTC:* `{}`\n*ETH:* `{}`"\
-        .format(config['donate_paypal'], config['donate_cashapp'], config['donate_btc'], config['donate_eth'])
+    message_text = (
+        get_message(message.chat_id, "donate")
+        + f"\n\n*Paypal:* {config['donate_paypal']}\n*CashApp:* {config['donate_cashapp']}\n*BTC:* `{config['donate_btc']}`\n*ETH:* `{config['donate_eth']}`"
+    )
+
     message.reply_markdown(message_text, disable_web_page_preview=True)
 
 
@@ -657,7 +662,7 @@ def lang_stats_command(update: Update, context: CallbackContext):
         lang_stats_message += "\n" + u"\u200E" + "{}: {:,}".format(lang[code]['lang_name'], count)
 
     # compile stats message in order
-    for index in range(0, len(lang)):
+    for index in range(len(lang)):
         try:
             lang_stats_message += message_lines[str(index)]
         # Skip langs with 0 users
@@ -713,12 +718,12 @@ def opt_command(update: Update, context: CallbackContext):
         else:
             users[user_id]['opt_in'] = True
             message.reply_text(get_message(user_id, "opted_in"))
+    elif opt_in:
+        users[user_id]['opt_in'] = False
+        message.reply_text(get_message(user_id, "opted_out"))
+
     else:
-        if not opt_in:
-            message.reply_text(get_message(user_id, "already_opted_out"))
-        else:
-            users[user_id]['opt_in'] = False
-            message.reply_text(get_message(user_id, "opted_out"))
+        message.reply_text(get_message(user_id, "already_opted_out"))
 
 
 def restart_command(update: Update, context: CallbackContext):
@@ -729,7 +734,10 @@ def restart_command(update: Update, context: CallbackContext):
     if message.from_user.id in config['admins']:
         message.reply_text(get_message(message.chat_id, "restarting"))
         save_files()
-        logger.info("Bot restarted by {} ({})".format(message.from_user.first_name, message.from_user.id))
+        logger.info(
+            f"Bot restarted by {message.from_user.first_name} ({message.from_user.id})"
+        )
+
         os.execl(sys.executable, sys.executable, *sys.argv)
     else:
         message.reply_text(get_message(message.chat_id, "no_permission"))
@@ -846,7 +854,7 @@ def broadcast_thread(context: CallbackContext):
         except TelegramError as e:
             # ignore errors from bot trying to message user who has not messaged them first
             if e.message != 'Chat not found':
-                logger.warning("Error '{}' when broadcasting message to {}".format(e.message, user_id))
+                logger.warning(f"Error '{e.message}' when broadcasting message to {user_id}")
 
         index += 1
         if index >= config['broadcast_batch_size']:
@@ -903,17 +911,20 @@ def handle_error(update: Update, context: CallbackContext):
     # prevent spammy errors from logging
     if context.error in ("Forbidden: bot was blocked by the user", "Timed out"):
         return
-    logger.warning('Update "{}" caused error "{}"'.format(update, context.error))
+    logger.warning(f'Update "{update}" caused error "{context.error}"')
 
 
 def load_lang():
     path = os.path.join(directory, 'lang.json')
-    data = json.load(codecs.open(path, 'r', 'utf-8-sig'))
-    return data
+    return json.load(codecs.open(path, 'r', 'utf-8-sig'))
 
 
 def load_json(file_name):
-    file_path = os.path.join(directory, file_name if file_name.endswith('.json') else file_name + '.json')
+    file_path = os.path.join(
+        directory,
+        file_name if file_name.endswith('.json') else f'{file_name}.json',
+    )
+
     with open(file_path) as json_file:
         data = json.load(json_file)
     json_file.close()
@@ -922,7 +933,11 @@ def load_json(file_name):
 
 def save_json(json_obj, file_name):
     data = json.dumps(json_obj)
-    file_path = os.path.join(directory, file_name if file_name.endswith('.json') else file_name + '.json')
+    file_path = os.path.join(
+        directory,
+        file_name if file_name.endswith('.json') else f'{file_name}.json',
+    )
+
     with open(file_path, "w") as json_file:
         json_file.write(simplejson.dumps(simplejson.loads(data), indent=4, sort_keys=True))
     json_file.close()
